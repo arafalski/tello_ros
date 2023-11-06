@@ -75,6 +75,7 @@ namespace tello_gazebo
     };
 
     FlightState flight_state_;
+    ignition::math::Vector3d last_velocity;
 
     gazebo::physics::LinkPtr base_link_;
     ignition::math::Vector3d gravity_;
@@ -375,11 +376,20 @@ namespace tello_gazebo
         return;
       }
 
+      ignition::math::Vector3d linear_vel = base_link_->RelativeLinearVel();
+      ignition::math::Vector3d linear_acc = base_link_->RelativeLinearAccel();
+
       // Publish flight data
       tello_msgs::msg::FlightData flight_data;
       flight_data.header.stamp = ros_time;
       flight_data.sdk = flight_data.SDK_1_3;
       flight_data.bat = battery_percent;
+      flight_data.vgx = (int32_t)linear_vel.X();
+      flight_data.vgy = (int32_t)linear_vel.Y();
+      flight_data.vgz = (int32_t)linear_vel.Z();
+      flight_data.agx = linear_acc.X();
+      flight_data.agy = linear_acc.Y();
+      flight_data.agz = linear_acc.Z();
       flight_data_pub_->publish(flight_data);
 
       // Finish pending actions
