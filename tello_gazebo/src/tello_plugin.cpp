@@ -1,4 +1,5 @@
 #include <chrono>
+#include <random>
 
 #include "gazebo/gazebo.hh"
 #include "gazebo/physics/physics.hh"
@@ -55,6 +56,15 @@ namespace tello_gazebo
     return v > max ? max : (v < -max ? -max : v);
   }
 
+  std::default_random_engine generator;
+  std::normal_distribution<double> distribution(0.0, 0.1);
+  double speed_offset_x_ = distribution(generator);
+  double speed_offset_y_ = distribution(generator);
+
+  std::normal_distribution<double> distribution_acc(0.0, 0.005);
+  double acc_noise_x{};
+  double acc_noise_y{};
+
   class TelloPlugin : public gazebo::ModelPlugin
   {
     enum class FlightState
@@ -75,7 +85,6 @@ namespace tello_gazebo
     };
 
     FlightState flight_state_;
-    ignition::math::Vector3d last_velocity;
 
     gazebo::physics::LinkPtr base_link_;
     ignition::math::Vector3d gravity_;
@@ -279,8 +288,8 @@ namespace tello_gazebo
 
         // Calc desired acceleration (ubar)
         ignition::math::Vector3d lin_ubar, ang_ubar;
-        lin_ubar.X(x_controller_.calc(linear_velocity.X(), dt, 0));
-        lin_ubar.Y(y_controller_.calc(linear_velocity.Y(), dt, 0));
+        lin_ubar.X(x_controller_.calc(linear_velocity.X() + speed_offset_x_, dt, 0));
+        lin_ubar.Y(y_controller_.calc(linear_velocity.Y() + speed_offset_y_, dt, 0));
         lin_ubar.Z(z_controller_.calc(linear_velocity.Z(), dt, 0));
         ang_ubar.Z(yaw_controller_.calc(angular_velocity.Z(), dt, 0));
 
@@ -379,6 +388,9 @@ namespace tello_gazebo
       ignition::math::Vector3d linear_vel = base_link_->RelativeLinearVel();
       ignition::math::Vector3d linear_acc = base_link_->RelativeLinearAccel();
 
+      acc_noise_x = distribution(generator);
+      acc_noise_y = distribution(generator);
+
       // Publish flight data
       tello_msgs::msg::FlightData flight_data;
       flight_data.header.stamp = ros_time;
@@ -387,9 +399,9 @@ namespace tello_gazebo
       flight_data.vgx = (int32_t)linear_vel.X();
       flight_data.vgy = (int32_t)linear_vel.Y();
       flight_data.vgz = (int32_t)linear_vel.Z();
-      flight_data.agx = linear_acc.X();
-      flight_data.agy = linear_acc.Y();
-      flight_data.agz = linear_acc.Z();
+      flight_data.agx = (linear_acc.X() + acc_noise_x) * 1000 / 9.81;
+      flight_data.agy = (linear_acc.Y() + acc_noise_y) * 1000 / 9.81;
+      flight_data.agz = (linear_acc.Z() - 9.81) * 1000 / 9.81;
       flight_data_pub_->publish(flight_data);
 
       // Finish pending actions
